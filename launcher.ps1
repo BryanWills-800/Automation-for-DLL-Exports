@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-Optimized launcher for DLL export and scanner execution with Python fallback.
+Optimised launcher for DLL export and scanner execution with Python fallback.
 
 .DESCRIPTION
 - Compiles a C DLL exporter (mandatory).
-- Compiles a scanner C program to inspect functions from C or DLL.
+- Compiles a scanner C program to inspect functions from C or a DLL.
 - If scanner compilation fails or GCC is unavailable, falls back to Python.
 - Logs all steps to a log file and safely writes JSON.
 #>
 
 param(
     [switch]$VerboseMode,
-    [ValidateSet("C","DLL")]
+    [ValidateSet("C", "DLL")]
     [string]$ScanType = "C",     # Default scan type
     [int]$SchemaVersion = 1      # JSON schema version
 )
@@ -25,7 +25,7 @@ $MainRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 # Logging Stuff
 $Logger = Join-Path $MainRoot "logger.log"
 $Global:Logger = $Logger
-[System.IO.File]::WriteAllText($Global:Logger, "", [System.Text.Encoding]::UTF8)
+[System.IO.File]:: WriteAllText($Global: Logger, "", [System.Text.Encoding]:: UTF8)
 
 function Logger {
     param (
@@ -63,14 +63,14 @@ function Logger {
     }
 }
 
-
 Logger -Message "Launcher has been activated!" -LogLevel "INFO"
 
 # Version Check
 $SchemaVersion = python read_config.py schema_version
 if ($LASTEXITCODE -eq 0) {
     Logger -Message "Schema Version of scanner is $SchemaVersion" -LogLevel "debug"
-} else {
+} 
+else {
     Logger -Message "Schema Version of Scanner was not found!!!" -LogLevel "warn"
     Logger -Message "Launcher finished." -LogLevel "info"
     $SchemaVersion = 1
@@ -90,7 +90,6 @@ if (-not (Test-Path $ExportsFile) -or (Get-Content $ExportsFile -Raw).Trim() -eq
     '{}' | Out-File -Encoding utf8 $ExportsFile
     Logger -Message "Created empty exports JSON file." -LogLevel "DEBUG"
 }
-
 
 # ---------------------------
 # Choose file to scan
@@ -184,3 +183,4 @@ do {
 } while ($key.Key -ne "Enter")
 
 Logger "Launcher finished."
+
