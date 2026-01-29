@@ -183,4 +183,3 @@ do {
 } while ($key.Key -ne "Enter")
 
 Logger "Launcher finished."
-
