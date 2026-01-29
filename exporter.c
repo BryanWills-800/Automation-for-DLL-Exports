@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdbool.h>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -15,4 +16,8 @@ EXPORT int fast_add(int a, int b) {
 
 EXPORT void greet(void) {
     printf("Hello, world from GCC compiler!\n");
+}
+
+EXPORT bool add() {
+    return true;
 }

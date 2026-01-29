@@ -42,8 +42,9 @@ for ret_type, name, args_list in func_pattern.findall(source_code):
     functions.append({
         "name": name,
         "return_type": ret_type.strip(),
-        "args": args_list.strip()
+        "args": args_list.strip() if (arguments := args_list.strip()) else "void"
     })
+    print(args_list.strip())
 
 data = {
     "schema_version": int(args.version),

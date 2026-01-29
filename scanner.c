@@ -98,16 +98,19 @@ int main(int argc, char *argv[]) {
         fprintf(out, "      {\n");
         fprintf(out, "         \"name\": \"%s\",\n", functions[i].name);
         fprintf(out, "         \"return_type\": \"%s\",\n", functions[i].return_type);
-        fprintf(out, "         \"args\": \"%s\"\n", functions[i].args);
-        fprintf(out, "      }%s\n", (i < func_count-1) ? "," : "");
+
+        if (functions[i].args) {
+            fprintf(out, "         \"args\": \"%s\"\n", functions[i].args);
+            fprintf(out, "      }%s\n", (i < func_count-1) ? "," : "");
+        }
+        else {
+            fprintf(out, "         \"args\": \"%s\"\n", "void");
+        }
     }
 
     fprintf(out, "   ]\n");
     fprintf(out, "}\n");
 
     fclose(out);
-
-    printf("Found %d exported functions. JSON written to %s\n", func_count, json_file);
-
     return 0;
 }

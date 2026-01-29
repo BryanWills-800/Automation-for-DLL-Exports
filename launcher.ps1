@@ -22,23 +22,75 @@ param(
 
 $MainRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# Logger
-$Logger = Join-Path $MainRoot "log.txt"
-"Launcher started at $(Get-Date)" | Out-File $Logger
+# Logging Stuff
+$Logger = Join-Path $MainRoot "logger.log"
+$Global:Logger = $Logger
+[System.IO.File]::WriteAllText($Global:Logger, "", [System.Text.Encoding]::UTF8)
+
+function Logger {
+    param (
+        [String]$Date = ([DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")),
+        [String]$LogLevel = "INFO",
+        [String]$Message,
+        [String]$OutFile = $Global:Logger
+    )
+
+    if (-not $Message) { return }
+
+    if (-not $OutFile) {
+        Write-Warning "Logger file path not set. Message: $Message"
+        return
+    }
+
+    $LogTypes = @{
+        DEBUG = { param($msg) Write-Host "[DEBUG] $msg" -ForegroundColor Cyan }
+        INFO  = { param($msg) Write-Output "[INFO]  $msg" }
+        WARN  = { param($msg) Write-Warning "[WARN]  $msg" }
+        ERROR = { param($msg) Write-Error "[ERROR] $msg" }
+        FATAL = { param($msg) throw [System.Exception]::new($msg) }
+    }
+
+    $LogLevel = $LogLevel.ToUpper()
+    if (-not $LogTypes.ContainsKey($LogLevel)) {
+        Write-Warning "Unknown log level '$LogLevel', defaulting to INFO"
+        $LogLevel = "INFO"
+    }
+
+    & $LogTypes[$LogLevel] $Message
+
+    if ($LogLevel -ne "DEBUG") {
+        "$Date $LogLevel $Message" | Out-File -FilePath $OutFile -Append -Encoding UTF8
+    }
+}
+
+
+Logger -Message "Launcher has been activated!" -LogLevel "INFO"
+
+# Version Check
+$SchemaVersion = python read_config.py schema_version
+if ($LASTEXITCODE -eq 0) {
+    Logger -Message "Schema Version of scanner is $SchemaVersion" -LogLevel "debug"
+} else {
+    Logger -Message "Schema Version of Scanner was not found!!!" -LogLevel "warn"
+    Logger -Message "Launcher finished." -LogLevel "info"
+    $SchemaVersion = 1
+}
 
 # Paths
 $ExporterSource = Join-Path $MainRoot "exporter.c"
-$DLLFile       = Join-Path $MainRoot "my_library.dll"
-$ScannerSource = Join-Path $MainRoot "scanner.c"
-$ScannerExe    = Join-Path $MainRoot "scanner.exe"
-$PythonRunner  = Join-Path $MainRoot "scanner.py"
-$VenvPython    = Join-Path $MainRoot ".venv\Scripts\python.exe"
-$ExportsFile   = Join-Path $MainRoot "exports.json"
+$DLLFile        = Join-Path $MainRoot "my_library.dll"
+$ScannerSource  = Join-Path $MainRoot "scanner.c"
+$ScannerExe     = Join-Path $MainRoot "scanner.exe"
+$PythonRunner   = Join-Path $MainRoot "scanner.py"
+$VenvPython     = Join-Path $MainRoot ".venv\Scripts\python.exe"
+$ExportsFile    = Join-Path $MainRoot "exports.json"
 
 # Ensure JSON exists
 if (-not (Test-Path $ExportsFile) -or (Get-Content $ExportsFile -Raw).Trim() -eq '') {
     '{}' | Out-File -Encoding utf8 $ExportsFile
+    Logger -Message "Created empty exports JSON file." -LogLevel "DEBUG"
 }
+
 
 # ---------------------------
 # Choose file to scan
@@ -55,24 +107,20 @@ $SafeScanFile = $ScanFile -replace '\\','/'
 # Check GCC availability
 # ---------------------------
 if (-not (Get-Command gcc -ErrorAction SilentlyContinue)) {
-    Write-Error "GCC not found. Cannot compile DLL. Halting script."
-    exit 1
+    Logger -Message "GCC not found. Cannot compile DLL. Halting script." -LogLevel "fatal"
 }
 
 # ---------------------------
 # Compile DLL exporter
 # ---------------------------
-Write-Host "Compiling DLL exporter..."
-"Compiling DLL exporter..." | Out-File $Logger -Append
+Logger -Message "Compiling DLL exporter..." -LogLevel "info"
 
 gcc "`"$ExporterSource`"" -shared -o "`"$DLLFile`""
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "DLL compilation failed. Halting script."
-    exit 1
+    Logger -Message "DLL compilation failed. Halting script." -LogLevel "error"
 }
 
-"Exported DLL: $DLLFile" | Out-File $Logger -Append
-Write-Host "DLL compiled successfully."
+Logger -Message "Exported DLL: $DLLFile" -LogLevel "info"
 
 # ---------------------------
 # Compile scanner executable
@@ -85,19 +133,16 @@ if (Test-Path $ScannerExe) {
     $dllTime     = (Get-Item $DLLFile).LastWriteTime
     if ($scannerTime -gt $dllTime) {
         $compileScanner = $false
-        Write-Host "Scanner executable up-to-date. Skipping compilation."
-        "Scanner executable up-to-date. Skipping compilation." | Out-File $Logger -Append
+        Logger -Message "Scanner executable up-to-date. Skipping compilation." -LogLevel "debug"
     }
 }
 
 if ($compileScanner) {
-    Write-Host "Compiling scanner..."
-    "Compiling scanner..." | Out-File $Logger -Append
+    Logger -Message "Compiling scanner..." -LogLevel "debug"
 
     gcc "`"$ScannerSource`"" -o "`"$ScannerExe`""
     if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Scanner compilation failed. Falling back to Python."
-        "Scanner compilation failed. Falling back to Python." | Out-File $Logger -Append
+        Logger -Message "Scanner compilation failed. Falling back to Python." -LogLevel "info"
         $fallback = $true
     }
 }
@@ -106,15 +151,13 @@ if ($compileScanner) {
 # Run scanner
 # ---------------------------
 if (-not $fallback) {
-    Write-Host "Running scanner executable..."
-    "Running scanner executable..." | Out-File $Logger -Append
+    Logger -Message "Running scanner executable..." -LogLevel "debug"
 
     # Pass schema version as argument
     & $ScannerExe $SafeScanFile $ExportsFile $SchemaVersion 2>&1 | Tee-Object -FilePath $Logger -Append
 }
 else {
-    Write-Host "Running Python fallback..."
-    "Running Python fallback..." | Out-File $Logger -Append
+    Logger -Message "Running Python fallback..." -LogLevel "info"
 
     $PythonArgs = @(
         "--version", $SchemaVersion
@@ -129,18 +172,15 @@ else {
 }
 
 # ---------------------------
-# Read JSON safely
+# Complete Execution
 # ---------------------------
-try {
-    $data = Get-Content $ExportsFile -Raw | ConvertFrom-Json
-} catch {
-    Write-Warning "Failed to parse $ExportsFile. Using empty object."
-    $data = [PSCustomObject]@{ dll = ""; exported_functions = @() }
-}
 
-Write-Host "DLL scanned: $($data.dll)"
-Write-Host "Functions exported:"
-$data.exported_functions | ForEach-Object { Write-Host "  $_" }
+Logger -Message "DLL scanned: $(Split-Path $DLLFile -Leaf)" -LogLevel "INFO"
 
-Write-Host "Launcher finished."
-"Launcher finished at $(Get-Date)" | Out-File $Logger -Append
+Write-Host "Press Enter to exit..."
+
+do {
+    $key = [Console]::ReadKey($true)
+} while ($key.Key -ne "Enter")
+
+Logger "Launcher finished."
